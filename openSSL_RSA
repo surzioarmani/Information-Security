@@ -1,0 +1,142 @@
+from OpenSSL.crypto import load_privatekey, FILETYPE_PEM, sign, load_publickey,  X509
+from Cryptodome.Hash import SHA256 as SHA
+from Cryptodome.Cipher import PKCS1_OAEP
+from Cryptodome.PublicKey import RSA
+from Cryptodome.Signature import PKCS1_v1_5
+import Cryptodome
+
+def t_generate_key():
+    priv_key = RSA.generate(1024)
+    f = open('t_private_key.pem', 'wb')
+    f.write(priv_key.exportKey('PEM'))
+    f.close
+    
+def a_read_PEM():
+    # alice의 공개키, 개인키 읽어오기
+    f = open('a_private_key.pem','r')
+    a_priv_key = RSA.importKey(f.read())
+    a_pub_key = a_priv_key.publickey()
+    f.close()
+    return a_priv_key, a_pub_key
+
+def t_pub_read_PEM():
+    # 앨리스의 공개키 읽어오기
+    f = open('t_public_key.pem','r')
+    t_pub_key = RSA.importKey(f.read())
+    f.close()
+    return t_pub_key
+
+def rsa_verify(msg, t_pub_key, signature): # 디지털 서명과 해시값 비교
+    hash = SHA.new(msg)
+    print()
+    verifier = PKCS1_v1_5.new(t_pub_key)
+    if verifier.verify(hash, signature):
+        print("VERIFIED 디지털 서명 인증되었습니다.")
+    else:
+        print('DENIED 디지털 서명 인증하지 못하였습니다.')
+    return 0
+
+
+def t_read_PEM():
+    # 팀의 공개키, 개인키 읽어오기
+    f = open('t_private_key.pem','r')
+    t_priv_key = RSA.importKey(f.read())
+    t_pub_key = t_priv_key.publickey()
+    f.close()
+    return t_priv_key, t_pub_key
+
+def a_pub_read_PEM():
+    # 앨리스의 공개키 읽어오기
+    f = open('a_public_key.pem','r')
+    a_pub_key = RSA.importKey(f.read())
+    f.close()
+    return a_pub_key
+
+def rsa_signature(msg, t_priv_key): #코드를 해시화하고 비밀키를 이용하여 디지털 서명 (팀)
+    hash = SHA.new(msg)
+    signature = PKCS1_v1_5.new(t_priv_key).sign(hash)
+    print("signature: ")
+    print(signature)
+    print()
+    return signature
+
+
+def Encryption(plain, a_priv_key, t_pub_key):
+    # team의 공개 키로 해시 암호화
+    key_t = PKCS1_OAEP.new(t_pub_key)
+    hash_cipher_t = SHA.new(plain).digest()
+    cipher_t = key_t.encrypt(hash_cipher_t)
+
+    #alice의 개인 키로 해시 암호화
+    key_a = PKCS1_OAEP.new(a_priv_key)
+    hash_cipher_a = SHA.new(plain).digest()
+    cipher_a = key_a.encrypt(hash_cipher_a)
+
+    #데이터를 team의 공개키로 암호화
+    cipher_data = key_t.encrypt(plain)
+
+    return cipher_t, cipher_a, hash_cipher_t , cipher_data
+
+def Decryption(cipher_t, cipher_a, hash_cipher_t , cipher_data, t_priv_key, a_pub_key):
+    print("해시값")
+    print(hash_cipher_t)
+    print()
+
+    # team개인 키로 해시 복호화
+    key_t = PKCS1_OAEP.new(t_priv_key)
+    plain_t = key_t.decrypt(cipher_t)
+    print("team개인키로 복호화한 해시 값")
+    print(plain_t)
+    print()
+
+    # alice 공개 키로 해시 복호화 --> 전송자 인증
+    key_a = PKCS1_OAEP.new(a_priv_key)
+    plain_a = key_a.decrypt(cipher_a)
+    print("alice 공개 키로 복호화한 해시 값")
+    print(plain_a)
+    print()
+
+    # 데이터 team개인키로 복호화 한 값
+    plain_data = key_t.decrypt(cipher_data)
+    print("team 개인키로 복호화한 데이터")
+    print(plain_data)
+    print()
+
+    # 복호화 한 데이터의 해시값 구해서 비교
+    hash_cipher = SHA.new(plain_data).digest()
+    print("복호화한 데이터의 해시 값")
+    print(hash_cipher)
+    print()
+
+    if hash_cipher == plain_a and hash_cipher == plain_t:
+        print("*******************앨리스로부터 온 데이터가 맞습니다. 또한 데이터의 무결성 인증됩니다*******************")
+    else:
+        print("*******************잘못되었습니다.*******************")
+    return plain_data
+
+if __name__ == '__main__':
+    msg = 'MLcode'
+    dataset = '0101010'
+    #cipher = b'\x92q\x88\x88@\xc7\xeb\xc2~\x9f[\xaa\x83\x0fx\xd9R\x8b\xb8&V\xcfqW\xd2\xacuyj*`\xe2\x1c\xd1\xb1\x0e\xf26\x07;#\xa1n\xf0\xed\xc3\xfe\xf2\xe3\r\xce\xb9\x87\xeb\xc4\xaf\xfeNy\x02\x7f\tc7\x8c\\\x9d\x8e\xe9\xe7<N\xf9\xbb\xce3\xfa\xc9tE\x88\xc6\xa6\xc7\x9b\x95:\x99\xe9\xce\x16\x88\x19\xc3\xfc|\xbd\x7f\xba\x89\xddXhr\x08\xd0Y\x89\x95\xdf\x90S\x1b}\xdf\xf2BQ\xbb\xa9 \xb4\x81\xe9\xb4\x80\xed\xbc'
+    #hash_cipher =b'\xc5t\\\x8a\x1a\x02\x05\xed`,7?A\xbf\xd1z\x86\x8a\xc2\xee\x81\x82\xf1I\x16O\xa4\x86U\xb2\xa2r'
+    # team 시작
+    # t_generate_key()
+    t_priv_key, t_pub_key = t_read_PEM()
+    a_priv_key,a_pub_key  = a_read_PEM()
+    # a_pub_key = a_pub_read_PEM()
+
+    print("-----------------------TEAM-->ML CODE에 디지털 서명----------------------- ")
+    signature = rsa_signature(msg.encode('utf-8'), t_priv_key) # 앨리스에게 보낼 디지털 서명과 msg
+
+    #앨리스가 해시와 디지털 서명 비교
+    #data 암복호화
+    print("-----------------------ALICE-->디지털 서명과 해시 비교/ 데이터 암호화 전송-----------------------")
+    rsa_verify(msg.encode('utf-8'), t_pub_key, signature)
+
+    #앨리스가 데이터 해시후, team의 공개키로 암호화 전송
+    cipher_t, cipher_a, hash_cipher_t , cipher_data = Encryption(dataset.encode('utf-8'), a_priv_key, t_pub_key)
+
+    print("-----------------------TEAM-->암호화된 데이터 복호화 후 전송자와 데이터 무결성 확인 -----------------------")
+    #team이 데이터 복호화 및 전송자 확인
+    decrypt = Decryption(cipher_t, cipher_a, hash_cipher_t , cipher_data, t_priv_key, a_pub_key)
+
